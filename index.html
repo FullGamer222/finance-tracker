@@ -1,0 +1,201 @@
+
+<h2 class="sr-only">Finančni pregled – tortni diagram stroškov in prihodkov po kategorijah</h2>
+
+<style>
+  .fin-wrap { padding: 1rem 0; font-family: var(--font-sans); }
+  .fin-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .fin-card { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem; }
+  .fin-card-label { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; }
+  .fin-card-value { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+  .fin-card-value.pos { color: #1D9E75; }
+  .fin-card-value.neg { color: #E24B4A; }
+  .fin-controls { display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; }
+  .fin-controls select { font-size: 14px; padding: 6px 10px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); }
+  .fin-controls button { font-size: 13px; padding: 6px 14px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); cursor: pointer; }
+  .fin-controls button.active { background: var(--color-background-secondary); font-weight: 500; }
+  .fin-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 1rem; font-size: 13px; color: var(--color-text-secondary); }
+  .fin-legend-item { display: flex; align-items: center; gap: 6px; }
+  .fin-legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .fin-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .fin-chart-label { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 500; }
+  @media (max-width: 500px) { .fin-charts { grid-template-columns: 1fr; } }
+  .add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 0.5px solid var(--color-border-tertiary); }
+  .add-row input, .add-row select { font-size: 13px; padding: 6px 10px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); min-width: 80px; }
+  .add-row button { font-size: 13px; padding: 6px 14px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); cursor: pointer; white-space: nowrap; }
+</style>
+
+<div class="fin-wrap">
+  <div class="fin-cards">
+    <div class="fin-card"><div class="fin-card-label">Skupaj prihodki</div><div class="fin-card-value pos" id="total-in">€0</div></div>
+    <div class="fin-card"><div class="fin-card-label">Skupaj stroški</div><div class="fin-card-value neg" id="total-out">€0</div></div>
+    <div class="fin-card"><div class="fin-card-label">Bilanca</div><div class="fin-card-value" id="balance">€0</div></div>
+    <div class="fin-card"><div class="fin-card-label">Največji strošek</div><div class="fin-card-value neg" id="biggest">—</div></div>
+  </div>
+
+  <div class="fin-controls">
+    <button class="active" id="btn-pie" onclick="setChart('pie')">Tortni</button>
+    <button id="btn-doughnut" onclick="setChart('doughnut')">Krofni</button>
+    <button id="btn-bar" onclick="setChart('bar')">Stolpci</button>
+    <select id="filter-type" onchange="render()">
+      <option value="all">Vse</option>
+      <option value="Strošek">Samo stroški</option>
+      <option value="Prihodek">Samo prihodki</option>
+    </select>
+  </div>
+
+  <div class="fin-charts">
+    <div>
+      <div class="fin-chart-label" id="chart-label">Po kategorijah</div>
+      <div style="position:relative; width:100%; height:240px;">
+        <canvas id="mainChart" role="img" aria-label="Tortni diagram stroškov po kategorijah">Prikaz stroškov po kategorijah.</canvas>
+      </div>
+      <div class="fin-legend" id="legend"></div>
+    </div>
+    <div>
+      <div class="fin-chart-label">Prihodki vs Stroški</div>
+      <div style="position:relative; width:100%; height:240px;">
+        <canvas id="compareChart" role="img" aria-label="Primerjava prihodkov in stroškov">Prihodki vs stroški.</canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="add-row">
+    <input id="inp-name" placeholder="Naziv (npr. Mercator)" style="flex:2; min-width:120px;" />
+    <input id="inp-amount" type="number" placeholder="Znesek €" style="flex:1;" />
+    <select id="inp-type">
+      <option value="Strošek">Strošek</option>
+      <option value="Prihodek">Prihodek</option>
+    </select>
+    <select id="inp-cat">
+      <option>Hrana</option>
+      <option>Prevoz</option>
+      <option>Zabava</option>
+      <option>Zdravje</option>
+      <option>Obleke</option>
+      <option>Stanovanje</option>
+      <option>Plača</option>
+      <option>Ostalo</option>
+    </select>
+    <button onclick="addEntry()"><i class="ti ti-plus" aria-hidden="true"></i> Dodaj</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let entries = [
+  {name:'Mercator', amount:45, type:'Strošek', cat:'Hrana'},
+  {name:'Gorivo', amount:60, type:'Strošek', cat:'Prevoz'},
+  {name:'Kino', amount:20, type:'Strošek', cat:'Zabava'},
+  {name:'Zdravnik', amount:30, type:'Strošek', cat:'Zdravje'},
+  {name:'Plača', amount:1200, type:'Prihodek', cat:'Plača'},
+  {name:'Najemnina', amount:400, type:'Strošek', cat:'Stanovanje'},
+];
+
+const COLORS = {
+  Hrana:'#EF9F27', Prevoz:'#378ADD', Zabava:'#7F77DD',
+  Zdravje:'#1D9E75', Obleke:'#D4537E', Stanovanje:'#888780',
+  Plača:'#639922', Ostalo:'#B4B2A9', Prihodek:'#1D9E75', Strošek:'#E24B4A'
+};
+
+let chartType = 'pie';
+let mainChart, compareChart;
+
+function setChart(t) {
+  chartType = t;
+  ['pie','doughnut','bar'].forEach(x => document.getElementById('btn-'+x).classList.toggle('active', x===t));
+  render();
+}
+
+function addEntry() {
+  const name = document.getElementById('inp-name').value.trim();
+  const amount = parseFloat(document.getElementById('inp-amount').value);
+  const type = document.getElementById('inp-type').value;
+  const cat = document.getElementById('inp-cat').value;
+  if (!name || isNaN(amount) || amount <= 0) return;
+  entries.push({name, amount, type, cat});
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-amount').value = '';
+  render();
+}
+
+function fmt(n) {
+  return '€' + Math.round(n).toLocaleString('sl-SI');
+}
+
+function render() {
+  const filter = document.getElementById('filter-type').value;
+  const filtered = filter === 'all' ? entries : entries.filter(e => e.type === filter);
+
+  const totalIn = entries.filter(e=>e.type==='Prihodek').reduce((s,e)=>s+e.amount,0);
+  const totalOut = entries.filter(e=>e.type==='Strošek').reduce((s,e)=>s+e.amount,0);
+  const balance = totalIn - totalOut;
+
+  document.getElementById('total-in').textContent = fmt(totalIn);
+  document.getElementById('total-out').textContent = fmt(totalOut);
+  const balEl = document.getElementById('balance');
+  balEl.textContent = fmt(balance);
+  balEl.className = 'fin-card-value ' + (balance >= 0 ? 'pos' : 'neg');
+
+  const biggest = entries.filter(e=>e.type==='Strošek').sort((a,b)=>b.amount-a.amount)[0];
+  document.getElementById('biggest').textContent = biggest ? biggest.cat : '—';
+
+  const catMap = {};
+  filtered.forEach(e => { catMap[e.cat] = (catMap[e.cat]||0) + e.amount; });
+  const cats = Object.keys(catMap);
+  const vals = cats.map(c => catMap[c]);
+  const colors = cats.map(c => COLORS[c] || '#888');
+
+  if (mainChart) mainChart.destroy();
+  const ctx = document.getElementById('mainChart').getContext('2d');
+
+  if (chartType === 'bar') {
+    mainChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: cats, datasets: [{ data: vals, backgroundColor: colors, borderWidth: 0 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: v => '€'+v } } }
+      }
+    });
+  } else {
+    mainChart = new Chart(ctx, {
+      type: chartType,
+      data: { labels: cats, datasets: [{ data: vals, backgroundColor: colors, borderWidth: 2, borderColor: 'transparent' }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmt(ctx.raw) } }
+        }
+      }
+    });
+  }
+
+  const leg = document.getElementById('legend');
+  leg.innerHTML = cats.map((c,i) => {
+    const pct = Math.round(vals[i] / vals.reduce((a,b)=>a+b,0) * 100);
+    return `<span class="fin-legend-item"><span class="fin-legend-dot" style="background:${colors[i]}"></span>${c} ${fmt(vals[i])} (${pct}%)</span>`;
+  }).join('');
+
+  if (compareChart) compareChart.destroy();
+  const ctx2 = document.getElementById('compareChart').getContext('2d');
+  compareChart = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: ['Prihodki', 'Stroški'],
+      datasets: [{
+        data: [totalIn, totalOut],
+        backgroundColor: ['#1D9E75', '#E24B4A'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: v => '€'+v } } }
+    }
+  });
+}
+
+render();
+</script>
